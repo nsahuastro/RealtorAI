@@ -1,0 +1,7 @@
+requests
+pandas
+os
+glob2
+sentence-transformers
+chromadb
+transformers
