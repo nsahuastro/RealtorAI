@@ -1,11 +1,16 @@
 # RealtorAI
-
-A project for processing Singapore HDB resale flat data and building a Retrieval-Augmented Generation (RAG) based Q&A system using LLMs.
+An AI-powered Agent that answers questions about Singapore HDB resale prices using LLMs with RAG (Retrieval-Augmented Generation).
 
 ## Data Source
 data source: https://data.gov.sg/collections/189/view
 
 ## Features
+- 📊 Processes 900K+ HDB resale transactions
+- 🤖 Uses RAG for accurate, data-driven answers  
+- 🔍 Vector search with semantic understanding
+- 📈 Real Singapore housing market insights
+
+## Workings
 - Loads and preprocesses HDB resale flat data from CSV files
 - Cleans and saves processed data
 - Creates RAG documents and sets up a vector database
