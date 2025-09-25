@@ -37,6 +37,16 @@ Run the main script:
 python main.py
 ```
 
+## App Interface (Streamlit)
+An interactive web interface is available using Streamlit. This allows users to query HDB resale data and view results in a user-friendly dashboard.
+
+### How to Run the App
+In your terminal, run:
+```bash
+streamlit run app.py
+```
+This will launch the Streamlit app in your browser.
+
 ## Project Structure
 - `main.py`: Main entry point for data processing and Q&A setup
 - `get_hdb_data.py`: Functions for loading HDB data
