@@ -11,17 +11,14 @@ data source: https://data.gov.sg/collections/189/view
 - 📈 Real Singapore housing market insights
 
 ## Workings
-- Loads and preprocesses HDB resale flat data from CSV files
-- Cleans and saves processed data
-- Creates RAG documents and sets up a vector database
-- Provides a simple Q&A system for housing queries
+- Reuses `Processed_Data/preprocessed_combined_hdb_data.csv` when available
+- If the preprocessed file is missing, loads the raw CSV files, preprocesses them, and saves the canonical file
+- Builds a persistent Chroma vector collection from a deterministic 10,000-row sample
+- Retrieves matching transactions and uses FLAN-T5-small to generate a concise answer
 
 ## Requirements
-- Python 3.8+
-- pandas
-- sentence-transformers
-- chromadb
-- transformers
+- Python 3.10+
+- Install the packages listed in `requirement.txt` (Transformers 4.x is required)
 
 ## Setup
 1. Clone this repository.
@@ -29,7 +26,7 @@ data source: https://data.gov.sg/collections/189/view
    ```bash
    pip install -r requirement.txt
    ```
-3. Place HDB resale flat CSV files in the `ResaleFlatPrices/` folder.
+3. Keep the preprocessed CSV in `Processed_Data/`. If it is not present, place the raw HDB resale CSV files in `ResaleFlatPrices/` so the app can create it.
 
 ## Usage
 Run the main script:
@@ -47,6 +44,16 @@ streamlit run app.py
 ```
 This will launch the Streamlit app in your browser.
 
+### Startup and Data
+On the first run, RealtorAI builds the Chroma collection in `Processed_Data/chroma_db/`. Later runs reuse it while the preprocessed CSV, sample size, and document format are unchanged. If one changes, the collection is rebuilt once. FLAN-T5-small is downloaded from Hugging Face on first use and runs locally; no LLM API key is required.
+
+The app samples 10,000 of the roughly 963,000 available transactions to keep the local index manageable. Results are based on that sample, not the complete dataset. Increasing the sample size causes a one-time index rebuild.
+
+### HDB Room Terms
+HDB room counts include the living room. A 3-room flat commonly has two bedrooms, so a query for a “2-bedroom flat” is filtered as `3 ROOM`. An explicit “2-room flat” query is filtered as `2 ROOM`. Town and flat-type filters are applied before semantic ranking when those terms are recognized.
+
+Answers are generated from retrieved transactions. For example, “What was the price of a 2-bedroom flat in Ang Mo Kio?” maps to 3-room records in Ang Mo Kio. The lightweight model may produce a short answer; number-only outputs are presented with a grounded transaction sentence.
+
 ## Project Structure
 - `main.py`: Main entry point for data processing and Q&A setup
 - `get_hdb_data.py`: Functions for loading HDB data
@@ -56,9 +63,9 @@ This will launch the Streamlit app in your browser.
 - `Processed_Data/`: Output folder for processed data
 
 ## Example Questions
-- "Tell me the average resale price of 2 room HDB in Tampines in 2024?"
-- "What's the most expensive flat type?"
-- "How much do 4-room flats cost in Jurong?"
+- "What was the resale price of a 2-bedroom flat in Ang Mo Kio?"
+- "What were some 4-room resale prices in Jurong West?"
+- "What was the resale price per square meter of a flat in Tampines?"
 
 ## Logging
 The script uses Python's logging module for progress and error reporting.

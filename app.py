@@ -1,12 +1,13 @@
 import os
 import logging
-from datetime import datetime
 import streamlit as st
+import pandas as pd
 
 from get_hdb_data import load_hdb_data_from_csv
 from preprocessing_hdb_data import preprocessing_hdb_dataframe
 from rag_setup import (
     create_rag_documents,
+    get_persisted_vector_database,
     setup_vector_database,
     create_simple_qa_system,
     ask_hdb_question_txtgen,
@@ -19,34 +20,52 @@ logger = logging.getLogger(__name__)
 # Constants
 DATA_FOLDER = "ResaleFlatPrices/"
 OUTPUT_FOLDER = "Processed_Data/"
-SAMPLE_SIZE = 1000
+PREPROCESSED_DATA_PATH = os.path.join(OUTPUT_FOLDER, "preprocessed_combined_hdb_data.csv")
+SAMPLE_SIZE = 10000
+RAG_DOCUMENT_VERSION = "hdb-documents-v3"
 
 # Ensure output folder exists
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-@st.cache_resource  # cache so setup runs only once
-def setup_realtor_ai():
-    """Load data, preprocess, and set up the RAG system."""
+def ensure_preprocessed_data():
+    if os.path.exists(PREPROCESSED_DATA_PATH):
+        return True
+
     if not os.path.exists(DATA_FOLDER):
         st.error(f"Data folder '{DATA_FOLDER}' not found.")
-        return None, None
+        return False
 
     combined_hdb_df = load_hdb_data_from_csv(folder_path=DATA_FOLDER)
     if combined_hdb_df.empty:
         st.error("No data loaded from combined CSV files.")
+        return False
+
+    cleaned_hdb_df = preprocessing_hdb_dataframe(combined_hdb_df)
+    cleaned_hdb_df.to_csv(PREPROCESSED_DATA_PATH, index=False)
+    return True
+
+
+@st.cache_resource  # cache so setup runs only once
+def setup_realtor_ai():
+    """Reuse preprocessed HDB data and a persistent vector collection."""
+    if not ensure_preprocessed_data():
         return None, None
 
-    # Preprocess
-    cleaned_hdb_df = preprocessing_hdb_dataframe(combined_hdb_df)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    cleaned_hdb_df.to_csv(
-        os.path.join(OUTPUT_FOLDER, f"preprocessed_combined_hdb_data_{timestamp}.csv"),
-        index=False,
+    file_stat = os.stat(PREPROCESSED_DATA_PATH)
+    source_signature = (
+        f"{RAG_DOCUMENT_VERSION}:{file_stat.st_size}:"
+        f"{file_stat.st_mtime_ns}:{SAMPLE_SIZE}"
     )
+    vector_db_collection = get_persisted_vector_database(source_signature)
 
-    # Create RAG system
-    rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
-    vector_db_collection = setup_vector_database(rag_documents)
+    if vector_db_collection is None:
+        cleaned_hdb_df = pd.read_csv(
+            PREPROCESSED_DATA_PATH,
+            parse_dates=["month", "lease_commence_date"],
+        )
+        rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
+        vector_db_collection = setup_vector_database(rag_documents, source_signature)
+
     qa_pipeline = create_simple_qa_system()
 
     return vector_db_collection, qa_pipeline
