@@ -1,5 +1,4 @@
 
-from sentence_transformers import SentenceTransformer
 import chromadb
 from transformers import pipeline
 
@@ -49,10 +48,6 @@ def setup_vector_database(input_documents):
     # Create vector database for retrieval
     print("Setting up vector database...")
 
-    # Initialize embedding model (lightweight and free)
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("embedding model initialized: all-MiniLM-L6-v2 ")
-
     # Initialize ChromaDB (local vector database)
     client = chromadb.Client()
 
@@ -76,9 +71,9 @@ def setup_vector_database(input_documents):
     collection.add( documents=texts, ids=ids, metadatas=metadatas)
     print(f"Added {len(input_documents)} documents to vector database")
 
-    return collection, embedding_model
+    return collection
 
-def create_simple_qa_system(collection):
+def create_simple_qa_system():
 
     #Create a simple Q&A pipeline/system
     print("Setting up simple Q&A system...")
@@ -86,23 +81,15 @@ def create_simple_qa_system(collection):
     # Use a free, lightweight language model
     qa_pipeline = pipeline(
         "text2text-generation",
-        model= "google/flan-t5-small",  # small and free model "microsoft/DialoGPT-medium"
-        max_length=200,
-        truncation=True,
-        padding=True
-        #do_sample=True,
-        #temperature=0.7
-       # tokenizer="google/flan-t5-small",
-        #device=-1  # use CPU; set to 0 if you have a compatible GPU
+        model="google/flan-t5-small",
+        device=-1,
     )
-    print("Q&A pipeline initialized with microsoft/DialoGPT-medium model")
+    print("Q&A pipeline initialized with google/flan-t5-small")
     return qa_pipeline
 
 
 def ask_hdb_question(question, collection, qa_pipeline=None, top_k=3):
-    """
-    Answer questions about HDB data without using text generation model
-    """
+    """Build a summary from retrieved HDB records without text generation."""
     print(f"\n Question: {question}")
     
     # Step 1: Retrieve relevant documents
@@ -164,25 +151,24 @@ def ask_hdb_question_txtgen(question, collection, qa_pipeline, top_k=3):
         context = "\n\n".join(results['documents'][0])
         print(f"Retrieved {len(results['documents'][0])} relevant documents from vector database")
 
-        prompt= f""" Based on the HDB resale data provided, answer this question: {question}
-        HDB data:
-        {context[:1500]}  # limit context to first 1500 characters to avoid token limits
-        Answer:"""
+        prompt = f"""Answer the question in clear, concise natural language using only the HDB resale records below. If the records do not support an answer, say so. Do not invent statistics.
+Question: {question}
+HDB resale records:
+{context[:1500]}
+Answer:"""
 
-        # Step 4: Generate answer
         try:
-            response = qa_pipeline(prompt, max_length=len(prompt.split()) + 50)
-            answer = response[0]['generated_text'][len(prompt):].strip()
-            
-            print(f"💡 Answer: {answer}")
+            response = qa_pipeline(
+                prompt,
+                max_new_tokens=128,
+                truncation=True,
+            )
+            answer = response[0]["generated_text"].strip()
+            print(f"Answer: {answer}")
             return answer
         except Exception as e:
-            # Simple fallback answer
-            avg_price = sum([float(meta.get('price', 0)) for meta in results['metadatas'][0]]) / len(results['metadatas'][0])
-            towns = [meta.get('town', '') for meta in results['metadatas'][0]]
-            fallback_answer = f"Based on the data I found, the HDB flats in {', '.join(set(towns))} have average resale price around ${avg_price:,.0f}."
-            print(f"💡 Answer: {fallback_answer}")
-            return fallback_answer
+            print(f"Text generation failed: {e}")
+            return "I found relevant records but couldn't generate an answer. Please try again."
     else:
         print("No relevant data found")
         return "I'm sorry, I couldn't find relevant information to answer your question."

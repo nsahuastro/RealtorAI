@@ -1,8 +1,6 @@
 requests
 pandas
-os
 glob2
-sentence-transformers
 chromadb
-transformers
+transformers>=4.40,<5
 streamlit 

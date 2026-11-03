@@ -2,7 +2,6 @@ import os
 import logging
 from datetime import datetime
 import streamlit as st
-import pandas as pd
 
 from get_hdb_data import load_hdb_data_from_csv
 from preprocessing_hdb_data import preprocessing_hdb_dataframe
@@ -10,7 +9,7 @@ from rag_setup import (
     create_rag_documents,
     setup_vector_database,
     create_simple_qa_system,
-    ask_hdb_question,
+    ask_hdb_question_txtgen,
 )
 
 # Set logging
@@ -47,8 +46,8 @@ def setup_realtor_ai():
 
     # Create RAG system
     rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
-    vector_db_collection, embedding_model = setup_vector_database(rag_documents)
-    qa_pipeline = create_simple_qa_system(vector_db_collection)
+    vector_db_collection = setup_vector_database(rag_documents)
+    qa_pipeline = create_simple_qa_system()
 
     return vector_db_collection, qa_pipeline
 
@@ -65,7 +64,7 @@ if vector_db_collection is not None:
     query = st.text_input("Your question:")
     if st.button("Ask") and query.strip():
         with st.spinner("Thinking..."):
-            answer = ask_hdb_question(query, vector_db_collection)
+            answer = ask_hdb_question_txtgen(query, vector_db_collection, qa_pipeline)
         st.success("Answer")
         st.write(answer)
 else:

@@ -3,16 +3,11 @@ import pandas as pd
 import os
 import logging
 from datetime import datetime
-from pathlib import Path
 #import glob
-from sentence_transformers import SentenceTransformer
-import chromadb
-from transformers import pipeline
-from get_hdb_data import get_hdb_datasets_from_api
 from get_hdb_data import load_hdb_data_from_csv
 from preprocessing_hdb_data import preprocessing_hdb_dataframe
 from rag_setup import (create_rag_documents, setup_vector_database, create_simple_qa_system,
-                       ask_hdb_question, ask_hdb_question_txtgen)
+                       ask_hdb_question_txtgen)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -71,8 +66,8 @@ def main():
 
         # Create RAG system
         rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
-        vector_db_collection, embedding_model = setup_vector_database(rag_documents)
-        qa_pipeline = create_simple_qa_system(vector_db_collection)
+        vector_db_collection = setup_vector_database(rag_documents)
+        qa_pipeline = create_simple_qa_system()
 
         logger.info("HDB Housing assistant setup complete.")
 
@@ -87,7 +82,7 @@ def main():
 
         for question in test_questions:
             print(f"\n{'='*25}")
-            ask_hdb_question(question, vector_db_collection)
+            ask_hdb_question_txtgen(question, vector_db_collection, qa_pipeline)
         return True
     except Exception as e:
         logger.error(f"An error occurred in main execution: {e}")
@@ -99,13 +94,3 @@ if __name__ == "__main__":
         logger.info("Script completed successfully.")
     else:
         logger.error("Script encountered errors.")
-
-    # If you want to test the text generation based Q&A system separately, uncomment below:
-    '''
-    ####---Assuming vector_db_collection and embedding_model are already set up---####
-    question = "Tell me the average resale price of 2 room HDB in Tampines in 2024?"
-    print("\nTesting text generation based Q&A system...")
-    ask_hdb_question_txtgen(question, vector_db_collection, embedding_model)
-    '''
-
-
