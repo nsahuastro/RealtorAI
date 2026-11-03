@@ -45,9 +45,9 @@ streamlit run app.py
 This will launch the Streamlit app in your browser.
 
 ### Startup and Data
-On the first run, RealtorAI builds the Chroma collection in `Processed_Data/chroma_db/`. Later runs reuse it while the preprocessed CSV, sample size, and document format are unchanged. If one changes, the collection is rebuilt once. FLAN-T5-small is downloaded from Hugging Face on first use and runs locally; no LLM API key is required.
+The question box appears immediately. On the first submitted question, RealtorAI prepares the data, Chroma index, and FLAN-T5-small model. It indexes a deterministic sample of 1,000 rows into `Processed_Data/chroma_db/` in batches of 250. If a build is interrupted, the next run resumes from records already stored. Later questions and app starts reuse the complete collection while the preprocessed CSV, sample size, and document format are unchanged. A source change causes the index to be rebuilt. FLAN-T5-small runs locally; no LLM API key is required.
 
-The app samples 10,000 of the roughly 963,000 available transactions to keep the local index manageable. Results are based on that sample, not the complete dataset. Increasing the sample size causes a one-time index rebuild.
+The app samples 1,000 of the roughly 963,000 available transactions for faster development. Results are based on that sample, not the complete dataset. Increasing the sample size causes a one-time index rebuild.
 
 ### HDB Room Terms
 HDB room counts include the living room. A 3-room flat commonly has two bedrooms, so a query for a “2-bedroom flat” is filtered as `3 ROOM`. An explicit “2-room flat” query is filtered as `2 ROOM`. Town and flat-type filters are applied before semantic ranking when those terms are recognized.

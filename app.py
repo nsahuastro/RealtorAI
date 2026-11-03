@@ -8,6 +8,7 @@ from preprocessing_hdb_data import preprocessing_hdb_dataframe
 from rag_setup import (
     create_rag_documents,
     get_persisted_vector_database,
+    vector_database_is_complete,
     setup_vector_database,
     create_simple_qa_system,
     ask_hdb_question_txtgen,
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 DATA_FOLDER = "ResaleFlatPrices/"
 OUTPUT_FOLDER = "Processed_Data/"
 PREPROCESSED_DATA_PATH = os.path.join(OUTPUT_FOLDER, "preprocessed_combined_hdb_data.csv")
-SAMPLE_SIZE = 10000
+SAMPLE_SIZE = 1000
 RAG_DOCUMENT_VERSION = "hdb-documents-v3"
 
 # Ensure output folder exists
@@ -58,13 +59,17 @@ def setup_realtor_ai():
     )
     vector_db_collection = get_persisted_vector_database(source_signature)
 
-    if vector_db_collection is None:
+    if vector_db_collection is None or not vector_database_is_complete(vector_db_collection):
         cleaned_hdb_df = pd.read_csv(
             PREPROCESSED_DATA_PATH,
             parse_dates=["month", "lease_commence_date"],
         )
         rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
-        vector_db_collection = setup_vector_database(rag_documents, source_signature)
+        vector_db_collection = setup_vector_database(
+            rag_documents,
+            source_signature,
+            collection=vector_db_collection,
+        )
 
     qa_pipeline = create_simple_qa_system()
 
@@ -76,17 +81,15 @@ st.set_page_config(page_title="RealtorAI", layout="wide")
 st.title("RealtorAI - Singapore's HDB Housing Assistant")
 st.write("Ask me anything about Singapore HDB resale prices!")
 
-# Initialize system
-vector_db_collection, qa_pipeline = setup_realtor_ai()
-
-if vector_db_collection is not None:
-    query = st.text_input("Your question:")
-    if st.button("Ask") and query.strip():
-        with st.spinner("Thinking..."):
+query = st.text_input("Your question:")
+if st.button("Ask") and query.strip():
+    with st.spinner("Preparing the assistant and answering..."):
+        vector_db_collection, qa_pipeline = setup_realtor_ai()
+        if vector_db_collection is not None:
             answer = ask_hdb_question_txtgen(query, vector_db_collection, qa_pipeline)
-        st.success("Answer")
-        st.write(answer)
-else:
-    st.warning("RealtorAI is not initialized. Check your dataset.")
+            st.success("Answer")
+            st.write(answer)
+        else:
+            st.warning("RealtorAI could not be initialized. Check your data files.")
 
 

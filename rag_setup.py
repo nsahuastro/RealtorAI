@@ -7,6 +7,7 @@ from transformers import pipeline
 
 VECTOR_DB_PATH = "Processed_Data/chroma_db"
 VECTOR_COLLECTION_NAME = "hdb_data"
+VECTOR_DB_BATCH_SIZE = 250
 HDB_TOWNS = (
     "ANG MO KIO", "BEDOK", "BISHAN", "BUKIT BATOK", "BUKIT MERAH",
     "BUKIT PANJANG", "BUKIT TIMAH", "CENTRAL AREA", "CHOA CHU KANG",
@@ -148,37 +149,84 @@ def get_persisted_vector_database(source_signature):
     except chromadb.errors.NotFoundError:
         return None
 
-    if (
-        collection.metadata
-        and collection.metadata.get("source_signature") == source_signature
-        and collection.count() > 0
-    ):
+    if not collection.metadata or collection.metadata.get("source_signature") != source_signature:
+        client.delete_collection(name=VECTOR_COLLECTION_NAME)
+        return None
+
+    if vector_database_is_complete(collection):
         print("Reusing persistent HDB vector collection")
         return collection
 
-    client.delete_collection(name=VECTOR_COLLECTION_NAME)
-    return None
+    print(f"Found incomplete HDB vector collection ({collection.count()} records); resuming")
+    return collection
 
 
-def setup_vector_database(input_documents, source_signature):
-    print("Building persistent vector database...")
-    client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
-
-    collection = client.create_collection(
-        name=VECTOR_COLLECTION_NAME,
-        metadata={"source_signature": source_signature},
+def vector_database_is_complete(collection):
+    metadata = collection.metadata or {}
+    expected_count = metadata.get("expected_count")
+    return (
+        metadata.get("complete") is True
+        and expected_count is not None
+        and collection.count() == int(expected_count)
     )
-    print("Vector database collection 'hdb_data' created")
 
-    # Add documents to database
-    print("Adding documents to vector database...")
-    texts = [doc['text'] for doc in input_documents]
-    ids = [doc['id'] for doc in input_documents]
-    metadatas = [doc['metadata'] for doc in input_documents]
 
-    # generate embeddings and add to vector database collection
-    collection.add(documents=texts, ids=ids, metadatas=metadatas)
-    print(f"Added {len(input_documents)} documents to vector database")
+def setup_vector_database(
+    input_documents,
+    source_signature,
+    collection=None,
+    batch_size=VECTOR_DB_BATCH_SIZE,
+):
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
+
+    client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+    expected_ids = {doc["id"] for doc in input_documents}
+
+    if collection is not None:
+        existing_ids = set(collection.get(include=[])["ids"])
+        if not existing_ids.issubset(expected_ids):
+            client.delete_collection(name=VECTOR_COLLECTION_NAME)
+            collection = None
+
+    metadata = {
+        "source_signature": source_signature,
+        "expected_count": len(input_documents),
+        "complete": False,
+    }
+    if collection is None:
+        collection = client.create_collection(
+            name=VECTOR_COLLECTION_NAME,
+            metadata=metadata,
+        )
+    else:
+        collection.modify(metadata=metadata)
+
+    existing_ids = set(collection.get(include=[])["ids"])
+    for start in range(0, len(input_documents), batch_size):
+        batch = [
+            doc for doc in input_documents[start:start + batch_size]
+            if doc["id"] not in existing_ids
+        ]
+        if not batch:
+            continue
+
+        collection.add(
+            documents=[doc["text"] for doc in batch],
+            ids=[doc["id"] for doc in batch],
+            metadatas=[doc["metadata"] for doc in batch],
+        )
+        existing_ids.update(doc["id"] for doc in batch)
+        print(f"Indexed {len(existing_ids)}/{len(input_documents)} HDB records")
+
+    if collection.count() != len(input_documents):
+        raise RuntimeError(
+            f"Incomplete vector index: expected {len(input_documents)} records, "
+            f"found {collection.count()}"
+        )
+
+    collection.modify(metadata={**metadata, "complete": True})
+    print(f"Persistent vector collection ready with {collection.count()} records")
 
     return collection
 

@@ -8,6 +8,7 @@ from preprocessing_hdb_data import preprocessing_hdb_dataframe
 from rag_setup import (
     create_rag_documents,
     get_persisted_vector_database,
+    vector_database_is_complete,
     setup_vector_database,
     create_simple_qa_system,
     ask_hdb_question_txtgen,
@@ -26,7 +27,7 @@ def main():
         DATA_FOLDER = "ResaleFlatPrices/"
         OUTPUT_FOLDER = "Processed_Data/"
         PREPROCESSED_DATA_PATH = os.path.join(OUTPUT_FOLDER, "preprocessed_combined_hdb_data.csv")
-        SAMPLE_SIZE = 10000
+        SAMPLE_SIZE = 1000
         os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
         logger.info("Starting HDB data processing")
@@ -51,13 +52,17 @@ def main():
         )
         vector_db_collection = get_persisted_vector_database(source_signature)
 
-        if vector_db_collection is None:
+        if vector_db_collection is None or not vector_database_is_complete(vector_db_collection):
             cleaned_hdb_df = pd.read_csv(
                 PREPROCESSED_DATA_PATH,
                 parse_dates=["month", "lease_commence_date"],
             )
             rag_documents = create_rag_documents(cleaned_hdb_df, sample_size=SAMPLE_SIZE)
-            vector_db_collection = setup_vector_database(rag_documents, source_signature)
+            vector_db_collection = setup_vector_database(
+                rag_documents,
+                source_signature,
+                collection=vector_db_collection,
+            )
 
         qa_pipeline = create_simple_qa_system()
 
