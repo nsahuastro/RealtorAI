@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+copilot.md
+Processed_Data/chroma_db/
+Processed_Data/preprocessed_combined_hdb_data_*.csv
